@@ -14,7 +14,6 @@ import java.util.stream.StreamSupport;
  */
 public class EmailWatcher {
 
-    private static final String POISON = "EmailWatcher.Poison";
     private static final String[] DEFAULT_KEYWORDS =
             new String[]{
                     "secret",
@@ -24,6 +23,12 @@ public class EmailWatcher {
                     "audit",
                     "account"
             };
+
+    static final String KILL_SIGNAL = "whte_rbt.obj";
+
+    static boolean detectKillSignal(String msg) {
+        return KILL_SIGNAL.equals(msg);
+    }
 
     private final BlockingQueue<String> inbox;
     private String[] keywords;
@@ -54,17 +59,21 @@ public class EmailWatcher {
         return nextItem;
     }
 
-    boolean flagMsg(String msg) {
+    boolean scanMsg(String msg) {
         final String lcs = msg.toLowerCase();
         return Arrays.stream(keywords).parallel().anyMatch(lcs::contains);
     }
 
-    void alertSomeone(String msg) {
+    boolean fwdMsg(String msg) {
+        return true;
+    }
+
+    void onHit(String msg) {
         System.err.println(msg);
     }
 
     public void stop() {
-        enqueueMsg(POISON);
+        enqueueMsg(KILL_SIGNAL);
     }
 
     public void run() {
@@ -76,12 +85,14 @@ public class EmailWatcher {
         // Connect to default URL ("nats://localhost:4222")
         try (Connection nc = Nats.connect()) {
             nc.subscribe("BigBrother", m -> {
-                enqueueMsg(new String(m.getData()));
+                final String msg = new String(m.getData());
+                System.out.println("msg: " + msg);
+                enqueueMsg(msg);
             });
             StreamSupport.stream(
-                    new KillableSpliterator<String>(this::nextMsg, POISON), true)
-                    .filter(this::flagMsg)
-                    .forEach(this::alertSomeone);
+                    new KillableSpliterator<>(this::nextMsg, EmailWatcher::detectKillSignal), true)
+                    .filter(this::fwdMsg)
+                    .forEach(this::onHit);
         } catch (IOException ioex) {
             ioex.printStackTrace();
         }

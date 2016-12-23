@@ -3,6 +3,7 @@ package com.mattring.blog.nats.post1;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -11,17 +12,17 @@ import java.util.function.Supplier;
 public class KillableSpliterator<T> extends Spliterators.AbstractSpliterator<T> {
 
     private final Supplier<T> itemSupplier;
-    private final T poison;
+    private final Predicate<T> killSignalDetector;
 
-    public KillableSpliterator(Supplier<T> itemSupplier, T poison) {
+    public KillableSpliterator(Supplier<T> itemSupplier, Predicate<T> killSignalDetector) {
         super(Long.MAX_VALUE, Spliterator.CONCURRENT);
         this.itemSupplier = itemSupplier;
-        this.poison = poison;
+        this.killSignalDetector = killSignalDetector;
     }
 
     public boolean tryAdvance(Consumer<? super T> action) {
         final T item = itemSupplier.get();
-        if (poison == item) {
+        if (killSignalDetector.test(item)) {
             return false;
         }
         action.accept(item);
